@@ -1,0 +1,1 @@
+export { getWalletAddress } from './get-wallet-address';

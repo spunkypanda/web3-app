@@ -1,83 +1,90 @@
 import React, { useState, useEffect } from 'react';
-import * as ethers from 'ethers';
-import logo from './logo.svg';
+import { useWeb3React, UnsupportedChainIdError, Web3ReactProvider } from '@web3-react/core'
+import { Web3Provider, Network } from '@ethersproject/providers'
+import { InjectedConnector } from '@web3-react/injected-connector'
+
+import { getWalletAddress } from './utils';
 import './App.css';
 
-function App() {
-  const [haveMetamask, setHaveMetamask] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [accountAddress, setAccountAddress] = useState('');
-  const [accountBalance, setAccountBalance] = useState('');
+export const ChainId: Record<string, number> = {
+  ETH_MAINNET: 1,
+  ETH_ROPSTEN: 3,
+  ETH_RINKEBY: 4,
+  ETH_GOERLI: 5,
+  ETH_KOVAN: 42,
+  POLYGON_MAINNET: 137,
+}
 
-  const checkMetamaskAvailability = () => {
-    // @ts-ignore-next-line
-    if (!window.ethereum) {
-      setHaveMetamask(false);
-    }
-    setHaveMetamask(true);
-  };
+function ConnectWallet() {
+  const injectedConnector = new InjectedConnector({ supportedChainIds: Object.values(ChainId) })
+  const { account, activate, active, chainId, error, library } = useWeb3React<Web3Provider>()
+  const [networkInfo, setNetworkInfo] = useState<Network>();
+  const [balance, setBalance]= useState('0.0');
 
-  const getWalletAddress = (address: string) => {
-    if (!address) return '';
-    return `${address.slice(0, 8)}....${address.slice(34, 42)}`;
-  };
+  const isUnsupportedChainIdError = error instanceof UnsupportedChainIdError;
+  if (isUnsupportedChainIdError) {
+    console.error(error);
+  }
 
-  const connectWallet = async () => {
-    try {
-
-      // @ts-ignore-next-line
-      if (!window.ethereum) {
-        setHaveMetamask(false);
-      }
-
-      // @ts-ignore-next-line
-      const accounts: string[] = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-
-      const walletAddress = getWalletAddress(accounts[0])
-      setAccountAddress(walletAddress);
-      setIsConnected(true);
-
-      // @ts-ignore-next-line
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const balance = await provider.getBalance(accounts[0]);
-      const bal = ethers.utils.formatEther(balance);
-      setAccountBalance(bal);
-
-    } catch (err) {
-      setIsConnected(false);
-    }
+  const onClick = () => {
+    activate(injectedConnector);
   };
 
   useEffect(() => {
-    checkMetamaskAvailability();
-  }, []);
+    library?.getNetwork().then((networkInfo) => {
+      setNetworkInfo(networkInfo);
+    });
+
+    if (account) {
+      library?.getBalance(account).then((result) => {
+        setBalance((+result/1e18).toString());
+      });
+    } else {
+      setBalance('');
+    }
+  }, [library, account]);
 
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{color: 'gray' }}>
-          <h2>Crypto balance checker</h2>
-        </div>
         {
-          haveMetamask ? (
+          active ? (
             <div>
-              <button onClick={connectWallet} disabled={isConnected} >Connect wallet</button>
-              {(isConnected && accountAddress && accountBalance) && (
-                <p>
-                  <b>Address: </b>{accountAddress}
-                  <br></br>
-                  <b>Balance: </b>{(+accountBalance).toFixed(6)} ETH
-                </p>
+              <div>ChainId: {chainId}</div>
+              <div>Network: {networkInfo?.name}</div>
+              <div>Account: {getWalletAddress(account)} {active && (
+                <span>✅ </span>
               )}
+              </div>
+              <div>Balance: {balance}</div>
             </div>
           ) : (
-            <div><h3>Please install metamask</h3></div>
+            <button type="button" onClick={onClick}>
+              Connect Wallet
+            </button>
           )
         }
       </header>
     </div>
+  )
+}
+
+function getLibrary(provider: any): Web3Provider {
+  const library = new Web3Provider(provider)
+  library.pollingInterval = 12000
+  return library
+}
+
+function App(data: any) {
+  return (
+    <Web3ReactProvider getLibrary={getLibrary}>
+      <div>
+        <nav style={{ textAlign: 'center' }}>
+          <h2>Hello World</h2>
+        </nav>
+        <ConnectWallet />
+      </div>
+    </Web3ReactProvider>
   );
 }
 
